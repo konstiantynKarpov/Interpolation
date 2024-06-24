@@ -173,38 +173,50 @@ namespace WindowsFormsApp1
 
         public void HandleCalculation(string xValuesText, string yValuesText, string interpolationText, string selectedItem, TextBox txtResult, TextBox txtPolynomial, TextBox txtNumberOfIterations, Chart chart1)
         {
-            double result;
-            int iterations;
-
-            (double[] xArray, double[] yArray, double x, Interpolation interpolationMethod) = _inputHandler.ParseAndValidate(xValuesText, yValuesText, interpolationText, selectedItem);
-            if (xArray == null || yArray == null || interpolationMethod == null)
+            try
             {
-                return;
+                double result;
+                int iterations;
+
+                (double[] xArray, double[] yArray, double x, Interpolation interpolationMethod) = _inputHandler.ParseAndValidate(xValuesText, yValuesText, interpolationText, selectedItem);
+                if (xArray == null || yArray == null || interpolationMethod == null)
+                {
+                    return;
+                }
+
+                // Check if the interpolation point is within the range of x values
+                if (x >= xArray.Min() && x <= xArray.Max())
+                {
+                    MessageBox.Show($"The interpolation point x = {x} must not be within the range of entered x values. Please enter a value outside of [{xArray.Min()}, {xArray.Max()}].", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    return;
+                }
+
+                (result, iterations) = interpolationMethod.Interpolate(xArray, yArray, x);
+
+                string polynomial = interpolationMethod is Lagrange
+                    ? ((Lagrange)interpolationMethod).GetLagrangePolynomialString(xArray, yArray)
+                    : ((Aitken)interpolationMethod).GetAitkenPolynomialString(xArray, yArray);
+
+                txtResult.Text = $"Interpolated value at x = {x} is {result}.";
+                txtPolynomial.Text = $"The polynomial is: {polynomial}";
+                txtNumberOfIterations.Text = $"{selectedItem} iterations: {iterations}";
+
+                // Add the interpolated point to the data
+                List<double> xList = new List<double>(xArray);
+                List<double> yList = new List<double>(yArray);
+                xList.Add(x);
+                yList.Add(result);
+
+                DataVisualizer visualizer = new DataVisualizer(chart1, xList.ToArray(), yList.ToArray());
+                visualizer.VisualizeData();
             }
-
-            (result, iterations) = interpolationMethod.Interpolate(xArray, yArray, x);
-
-            // Получение полиномиальной строки
-            string polynomial = interpolationMethod is Lagrange
-                ? ((Lagrange)interpolationMethod).GetLagrangePolynomialString(xArray, yArray)
-                : ((Aitken)interpolationMethod).GetAitkenPolynomialString(xArray, yArray);
-
-            // Обновление текстовых полей на форме
-            txtResult.Text = $"Interpolated value at x = {x} is {result}.";
-            txtPolynomial.Text = $"The polynomial is: {polynomial}";
-            txtNumberOfIterations.Text = $"{selectedItem} iterations: {iterations}";
-
-            // Add the interpolated point to the data
-            List<double> xList = new List<double>(xArray);
-            List<double> yList = new List<double>(yArray);
-            xList.Add(x);
-            yList.Add(result);
-
-            // Визуализация данных
-            DataVisualizer visualizer = new DataVisualizer(chart1, xList.ToArray(), yList.ToArray());
-            visualizer.VisualizeData();
+            catch (Exception ex)
+            {
+                MessageBox.Show($"An error occurred during calculation: {ex.Message}", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
         }
     }
+
 
 
     public class SaveHandler
@@ -256,6 +268,13 @@ namespace WindowsFormsApp1
                 return (null, null, 0, null);
             }
 
+            // Check for commas in interpolationText
+            if (interpolationText.Contains(","))
+            {
+                MessageBox.Show("Please use '.' as the decimal separator.");
+                return (null, null, 0, null);
+            }
+
             // Parse the comma-separated x and y values into arrays
             try
             {
@@ -282,11 +301,13 @@ namespace WindowsFormsApp1
                 return (null, null, 0, null);
             }
 
+            // Check for valid interpolation value
             if (!double.TryParse(interpolationText, NumberStyles.Any, CultureInfo.InvariantCulture, out x))
             {
-                MessageBox.Show("Please enter a valid number for interpolation.");
+                MessageBox.Show("Please enter a valid number for interpolation. Use '.' as the decimal separator.");
                 return (null, null, 0, null);
             }
+           
 
             switch (selectedItem)
             {
@@ -303,6 +324,8 @@ namespace WindowsFormsApp1
 
             return (xArray, yArray, x, interpolationMethod);
         }
+
+
     }
 
     public class DataVisualizer
